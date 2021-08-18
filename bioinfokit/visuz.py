@@ -14,6 +14,7 @@ from random import sample
 from functools import reduce
 import sys
 from matplotlib.colors import ListedColormap
+from scipy.stats import gaussian_kde
 
 __all__ = ['GeneExpression', 'General', 'gene_exp', 'general', 'marker', 'marker', 'stat', 'cluster']
 
@@ -245,7 +246,8 @@ class GeneExpression:
            axtickfontsize=9, axtickfontname="Arial", axlabelfontsize=9, axlabelfontname="Arial", axxlabel=None,
            axylabel=None, xlm=None, ylm=None, fclines=False, fclinescolor='#2660a4', legendpos='best',
            figname='ma', legendanchor=None, legendlabels=['significant up', 'not significant', 'significant down'],
-           plotlegend=False, theme=None, geneid=None, genenames=None, gfont=8, gstyle=1, title=None):
+           plotlegend=False, theme=None, geneid=None, genenames=None, gfont=8, gstyle=1, title=None,
+           density=False, densityColorP='viridis'):
         _x, _y = 'A', 'M'
         assert General.check_for_nonnumeric(df[lfc]) == 0, 'dataframe contains non-numeric values in lfc column'
         assert General.check_for_nonnumeric(df[ct_count]) == 0, \
@@ -268,16 +270,33 @@ class GeneExpression:
                                          ' to include both significant and non-significant genes'
         if theme:
             General.style_bg(theme)
+        # get density values if asked
+        if density:
+            xy = np.vstack([df['A_add_axy'],df[lfc]])
+            z = gaussian_kde(xy)(xy)
+
         plt.subplots(figsize=dim)
         if plotlegend:
-            s = plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
-                        alpha=valpha, s=dotsize, marker=markerdot)
+            if density:
+                s = plt.scatter(df['A_add_axy'], df[lfc], c=z, alpha=valpha, 
+                            s=dotsize, marker=markerdot, cmap=densityColorP)
+                plt.axhline(y=lfc_thr[0], color=color[0], linestyle='--')
+                plt.axhline(y=-lfc_thr[1], color=color[2], linestyle='--')
+            else:
+                s = plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
+                            alpha=valpha, s=dotsize, marker=markerdot)
             assert len(legendlabels) == 3, 'legendlabels must be size of 3'
             plt.legend(handles=s.legend_elements()[0], labels=legendlabels, loc=legendpos,
                            bbox_to_anchor=legendanchor)
         else:
-            plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
-                        alpha=valpha, s=dotsize, marker=markerdot)
+            if density:
+                plt.scatter(df['A_add_axy'], df[lfc], c=z, alpha=valpha, 
+                            s=dotsize, marker=markerdot, cmap=densityColorP)
+                plt.axhline(y=lfc_thr[0], color=color[0], linestyle='--')
+                plt.axhline(y=-lfc_thr[1], color=color[2], linestyle='--')
+            else:
+                plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
+                            alpha=valpha, s=dotsize, marker=markerdot)
         # draw a central line at M=0
         plt.axhline(y=0, color='#7d7d7d', linestyle='--')
         # draw lfc threshold lines
