@@ -247,7 +247,7 @@ class GeneExpression:
            axylabel=None, xlm=None, ylm=None, fclines=False, fclinescolor='#2660a4', legendpos='best',
            figname='ma', legendanchor=None, legendlabels=['significant up', 'not significant', 'significant down'],
            plotlegend=False, theme=None, geneid=None, genenames=None, gfont=8, gstyle=1, title=None,
-           density=False, densityColorP='viridis'):
+           density=False, densityColorP='viridis', returnFig=False):
         _x, _y = 'A', 'M'
         assert General.check_for_nonnumeric(df[lfc]) == 0, 'dataframe contains non-numeric values in lfc column'
         assert General.check_for_nonnumeric(df[ct_count]) == 0, \
@@ -275,7 +275,7 @@ class GeneExpression:
             xy = np.vstack([df['A_add_axy'],df[lfc]])
             z = gaussian_kde(xy)(xy)
 
-        plt.subplots(figsize=dim)
+        fig, ax = plt.subplots(figsize=dim)
         if plotlegend:
             if density:
                 s = plt.scatter(df['A_add_axy'], df[lfc], c=z, alpha=valpha, 
@@ -311,6 +311,8 @@ class GeneExpression:
         General.axis_labels(_x, _y, axlabelfontsize, axlabelfontname)
         General.axis_ticks(xlm, ylm, axtickfontsize, axtickfontname, ar)
         General.get_figure(show, r, figtype, figname, theme, title)
+        if returnFig:
+            return fig
 
     @staticmethod
     def hmap(df="dataframe", cmap="seismic", scale=True, dim=(4, 6), rowclus=True, colclus=True, zscore=None, xlabel=True,
