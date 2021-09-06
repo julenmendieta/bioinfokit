@@ -247,7 +247,11 @@ class GeneExpression:
            axylabel=None, xlm=None, ylm=None, fclines=False, fclinescolor='#2660a4', legendpos='best',
            figname='ma', legendanchor=None, legendlabels=['significant up', 'not significant', 'significant down'],
            plotlegend=False, theme=None, geneid=None, genenames=None, gfont=8, gstyle=1, title=None,
-           density=False, densityColorP='viridis', returnFig=False):
+           density=False, densityColorP='viridis', returnFig=False, noiseFilter=False):
+        '''
+        :param False noiseFilter: Change to a value from 0 to 100 to define the noise level by which filter out
+            data
+        '''
         _x, _y = 'A', 'M'
         assert General.check_for_nonnumeric(df[lfc]) == 0, 'dataframe contains non-numeric values in lfc column'
         assert General.check_for_nonnumeric(df[ct_count]) == 0, \
@@ -258,42 +262,110 @@ class GeneExpression:
         # it may update old instance of df
         df = df.drop(['color_add_axy', 'A_add_axy'], axis=1, errors='ignore')
         assert len(set(color)) == 3, 'unique color must be size of 3'
-        df.loc[(df[lfc] >= lfc_thr[0]), 'color_add_axy'] = color[0]  # upregulated
-        df.loc[(df[lfc] <= -lfc_thr[1]), 'color_add_axy'] = color[2]  # downregulated
+        if noiseFilter == False:
+            df.loc[(df[lfc] >= lfc_thr[0]), 'color_add_axy'] = color[0]  # upregulated
+            df.loc[(df[lfc] <= -lfc_thr[1]), 'color_add_axy'] = color[2]  # downregulated
+        else:
+            vals = list(df.loc[:, ct_count].values)
+            vals += list(df.loc[:, st_count].values)
+            noise = np.percentile(vals, noiseFilter)
+
+            noisePassUp = (np.log2((df[ct_count] + noise) /(df[st_count] + noise))) > lfc_thr[0]
+            noisePassDown = (np.log2((df[ct_count] + noise) / (df[st_count] + noise))) <= -lfc_thr[1]
+            df.loc[noisePassUp, 'color_add_axy'] = color[0]   # upregulated
+            df.loc[noisePassDown, 'color_add_axy'] = color[2]  # downregulated
+
+
         df['color_add_axy'].fillna(color[1], inplace=True)  # intermediate
         df['A_add_axy'] = (np.log2(df[ct_count]) + np.log2(df[st_count])) / 2
         # plot
         assign_values = {col: i for i, col in enumerate(color)}
         color_result_num = [assign_values[i] for i in df['color_add_axy']]
-        assert len(
-            set(color_result_num)) == 3, 'either significant or non-significant genes are missing; try to change lfc_thr' \
-                                         ' to include both significant and non-significant genes'
+        #assert len(
+        #    set(color_result_num)) == 3, 'either significant or non-significant genes are missing; try to change lfc_thr' \
+        #                                 ' to include both significant and non-significant genes'
+        originalColor = color
+        if len(set(color_result_num)) != 3:
+            if not 0 in color_result_num:
+                color = color[1:]
+            if not 2 in color_result_num:
+                color = color[0]
         if theme:
             General.style_bg(theme)
         # get density values if asked
         if density:
-            xy = np.vstack([df['A_add_axy'],df[lfc]])
-            z = gaussian_kde(xy)(xy)
+            # intermediate
+            if noiseFilter == False:
+                xy_i = np.vstack([df['A_add_axy'],df[lfc]])
+                z_i = gaussian_kde(xy_i)(xy_i)
+            else:
+                pos_i = df['color_add_axy'] == originalColor[1]
+                xy_i = np.vstack([df.loc[pos_i, 'A_add_axy'],df.loc[pos_i, lfc]])
+                z_i = gaussian_kde(xy_i)(xy_i)
+                # above and bellow Thress
+                if 0 in color_result_num:
+                    color0 = color[0]
+                    if 2 in color_result_num:
+                        color2 = color[2]
+                    else:
+                        color2 = 'nomatch'
+                else:
+                    color0 = 'nomatch'
+                    if 2 in color_result_num:
+                        color2 = color[1]
+                    else:
+                        color2 = 'nomatch'
+                pos_u = df['color_add_axy'] == color0
+                pos_d = df['color_add_axy'] == color2
 
         fig, ax = plt.subplots(figsize=dim)
         if plotlegend:
             if density:
-                s = plt.scatter(df['A_add_axy'], df[lfc], c=z, alpha=valpha, 
-                            s=dotsize, marker=markerdot, cmap=densityColorP)
-                plt.axhline(y=lfc_thr[0], color=color[0], linestyle='--')
-                plt.axhline(y=-lfc_thr[1], color=color[2], linestyle='--')
+                if noiseFilter == False:
+                    s = plt.scatter(df['A_add_axy'], df[lfc], c=z_i, alpha=valpha, 
+                               s=dotsize, marker=markerdot, cmap=densityColorP)
+                    plt.axhline(y=lfc_thr[0], color=originalColor[0], linestyle='--')
+                    plt.axhline(y=-lfc_thr[1], color=originalColor[2], linestyle='--')
+                else:
+                    # intermediate
+                    s = plt.scatter(df.loc[pos_i, 'A_add_axy'], df.loc[pos_i, lfc], c=z_i, alpha=valpha,
+                                    s=dotsize, marker=markerdot, cmap=densityColorP)
+                    # upregulated
+                    if color0 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_u, 'A_add_axy'], df.loc[pos_u, lfc], c=color0,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
+                    # downregulated
+                    if color2 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_d, 'A_add_axy'], df.loc[pos_d, lfc], c=color2,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
+
             else:
                 s = plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
                             alpha=valpha, s=dotsize, marker=markerdot)
             assert len(legendlabels) == 3, 'legendlabels must be size of 3'
-            plt.legend(handles=s.legend_elements()[0], labels=legendlabels, loc=legendpos,
-                           bbox_to_anchor=legendanchor)
+            if noiseFilter == False:
+                plt.legend(handles=s.legend_elements()[0], labels=legendlabels, loc=legendpos,
+                               bbox_to_anchor=legendanchor)
         else:
             if density:
-                plt.scatter(df['A_add_axy'], df[lfc], c=z, alpha=valpha, 
-                            s=dotsize, marker=markerdot, cmap=densityColorP)
-                plt.axhline(y=lfc_thr[0], color=color[0], linestyle='--')
-                plt.axhline(y=-lfc_thr[1], color=color[2], linestyle='--')
+                if noiseFilter == False:
+                    s = plt.scatter(df['A_add_axy'], df[lfc], c=z_i, alpha=valpha,
+                               s=dotsize, marker=markerdot, cmap=densityColorP)
+                    plt.axhline(y=lfc_thr[0], color=originalColor, linestyle='--')
+                    plt.axhline(y=-lfc_thr[1], color=originalColor, linestyle='--')
+                else:
+                    # intermediate
+                    s = plt.scatter(df.loc[pos_i, 'A_add_axy'], df.loc[pos_i, lfc], c=z_i, alpha=valpha,
+                                    s=dotsize, marker=markerdot, cmap=densityColorP)
+                    # upregulated
+                    if color0 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_u, 'A_add_axy'], df.loc[pos_u, lfc], c=color0,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
+                    # downregulated
+                    if color2 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_d, 'A_add_axy'], df.loc[pos_d, lfc], c=color2,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
+
             else:
                 plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
                             alpha=valpha, s=dotsize, marker=markerdot)
