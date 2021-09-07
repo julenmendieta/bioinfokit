@@ -261,7 +261,6 @@ class GeneExpression:
         # this is important to check if color or A exists and drop them as if you run multiple times same command
         # it may update old instance of df
         df = df.drop(['color_add_axy', 'A_add_axy'], axis=1, errors='ignore')
-        assert len(set(color)) == 3, 'unique color must be size of 3'
         if noiseFilter == False:
             df.loc[(df[lfc] >= lfc_thr[0]), 'color_add_axy'] = color[0]  # upregulated
             df.loc[(df[lfc] <= -lfc_thr[1]), 'color_add_axy'] = color[2]  # downregulated
@@ -285,38 +284,34 @@ class GeneExpression:
         #    set(color_result_num)) == 3, 'either significant or non-significant genes are missing; try to change lfc_thr' \
         #                                 ' to include both significant and non-significant genes'
         originalColor = color
-        if len(set(color_result_num)) != 3:
-            if not 0 in color_result_num:
-                color = color[1:]
-            if not 2 in color_result_num:
-                color = color[0]
         if theme:
             General.style_bg(theme)
         # get density values if asked
+        if noiseFilter != False:
+            pos_i = df['color_add_axy'] == originalColor[1]
+            # above and bellow Thress
+            if 0 in color_result_num:
+                color0 = originalColor[0]
+                if 2 in color_result_num:
+                    color2 = originalColor[2]
+                else:
+                    color2 = 'nomatch'
+            else:
+                color0 = 'nomatch'
+                if 2 in color_result_num:
+                    color2 = originalColor[1]
+                else:
+                    color2 = 'nomatch'
+            pos_u = df['color_add_axy'] == color0
+            pos_d = df['color_add_axy'] == color2
         if density:
             # intermediate
             if noiseFilter == False:
                 xy_i = np.vstack([df['A_add_axy'],df[lfc]])
                 z_i = gaussian_kde(xy_i)(xy_i)
             else:
-                pos_i = df['color_add_axy'] == originalColor[1]
                 xy_i = np.vstack([df.loc[pos_i, 'A_add_axy'],df.loc[pos_i, lfc]])
                 z_i = gaussian_kde(xy_i)(xy_i)
-                # above and bellow Thress
-                if 0 in color_result_num:
-                    color0 = color[0]
-                    if 2 in color_result_num:
-                        color2 = color[2]
-                    else:
-                        color2 = 'nomatch'
-                else:
-                    color0 = 'nomatch'
-                    if 2 in color_result_num:
-                        color2 = color[1]
-                    else:
-                        color2 = 'nomatch'
-                pos_u = df['color_add_axy'] == color0
-                pos_d = df['color_add_axy'] == color2
 
         fig, ax = plt.subplots(figsize=dim)
         if plotlegend:
@@ -340,8 +335,21 @@ class GeneExpression:
                                                     alpha=valpha, s=dotsize, marker=markerdot)
 
             else:
-                s = plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
-                            alpha=valpha, s=dotsize, marker=markerdot)
+                if noiseFilter == False:
+                    s = plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
+                                alpha=valpha, s=dotsize, marker=markerdot)
+                else:
+                    # intermediate
+                    s = plt.scatter(df.loc[pos_i, 'A_add_axy'], df.loc[pos_i, lfc], alpha=valpha,
+                                    s=dotsize, marker=markerdot, c=originalColor[1])
+                    # upregulated
+                    if color0 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_u, 'A_add_axy'], df.loc[pos_u, lfc], c=color0,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
+                    # downregulated
+                    if color2 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_d, 'A_add_axy'], df.loc[pos_d, lfc], c=color2,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
             assert len(legendlabels) == 3, 'legendlabels must be size of 3'
             if noiseFilter == False:
                 plt.legend(handles=s.legend_elements()[0], labels=legendlabels, loc=legendpos,
@@ -367,8 +375,22 @@ class GeneExpression:
                                                     alpha=valpha, s=dotsize, marker=markerdot)
 
             else:
-                plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
-                            alpha=valpha, s=dotsize, marker=markerdot)
+                if noiseFilter == False:
+                    plt.scatter(df['A_add_axy'], df[lfc], c=color_result_num, cmap=ListedColormap(color),
+                                alpha=valpha, s=dotsize, marker=markerdot)
+                else:
+                    # intermediate
+                    s = plt.scatter(df.loc[pos_i, 'A_add_axy'], df.loc[pos_i, lfc], alpha=valpha,
+                                    s=dotsize, marker=markerdot, c=originalColor[1])
+                    # upregulated
+                    if color0 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_u, 'A_add_axy'], df.loc[pos_u, lfc], c=color0,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
+                    # downregulated
+                    if color2 != 'nomatch':
+                        s = plt.scatter(df.loc[pos_d, 'A_add_axy'], df.loc[pos_d, lfc], c=color2,
+                                                    alpha=valpha, s=dotsize, marker=markerdot)
+
         # draw a central line at M=0
         plt.axhline(y=0, color='#7d7d7d', linestyle='--')
         # draw lfc threshold lines
